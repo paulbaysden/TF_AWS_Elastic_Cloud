@@ -2,28 +2,13 @@
 # HELM REPOSITORIES
 # ============================================================================
 
-resource "helm_repository" "kedacore" {
-  name = "kedacore"
-  url  = "https://kedacore.github.io/charts"
-}
-
-resource "helm_repository" "boomi" {
-  name = "boomi"
-  url  = "https://docker.io/v2/boomi"
-}
-
-resource "helm_repository" "prometheus_community" {
-  name = "prometheus-community"
-  url  = "https://prometheus-community.github.io/helm-charts"
-}
-
 # ============================================================================
 # KEDA (Kubernetes Event Driven Autoscaler)
 # ============================================================================
 
 resource "helm_release" "keda" {
   name             = "keda"
-  repository       = helm_repository.kedacore.name
+  repository       = "https://kedacore.github.io/charts"
   chart            = "keda"
   version          = var.helm_keda_version
   namespace        = kubernetes_namespace.keda.metadata[0].name
@@ -32,8 +17,8 @@ resource "helm_release" "keda" {
   values = [
     jsonencode({
       serviceAccount = {
-        create = true
-        name   = "keda-operator"
+        create = false
+        name   = kubernetes_service_account.keda.metadata[0].name
         annotations = {
           "eks.amazonaws.com/role-arn" = aws_iam_role.keda.arn
         }
@@ -85,7 +70,8 @@ resource "helm_release" "keda" {
 
   depends_on = [
     kubernetes_namespace.keda,
-    helm_repository.kedacore
+    kubernetes_service_account.keda,
+    aws_eks_node_group.system
   ]
 
   timeout = 300
@@ -97,7 +83,7 @@ resource "helm_release" "keda" {
 
 resource "helm_release" "boomi_elastic_controller" {
   name             = "runtime-elastic-controller-release"
-  chart            = "oci://docker.io/boomi/runtime-elastic-controller"
+  chart            = "oci://registry-1.docker.io/boomi/runtime-elastic-controller"
   version          = var.helm_boomi_elastic_controller_version
   namespace        = kubernetes_namespace.boomi.metadata[0].name
   create_namespace = false
@@ -124,8 +110,8 @@ resource "helm_release" "boomi_elastic_controller" {
       }
 
       serviceAccount = {
-        create = true
-        name   = "boomi-elastic-controller-sa"
+        create = false
+        name   = kubernetes_service_account.boomi_workload.metadata[0].name
         annotations = {
           "eks.amazonaws.com/role-arn" = aws_iam_role.boomi_workload.arn
         }
@@ -217,7 +203,7 @@ resource "helm_release" "boomi_elastic_controller" {
 
 resource "helm_release" "boomi_runtime_cloud" {
   name             = "runtime-cloud-release"
-  chart            = "oci://docker.io/boomi/runtime-cloud"
+  chart            = "oci://registry-1.docker.io/boomi/runtime-cloud"
   version          = var.helm_boomi_runtime_cloud_version
   namespace        = kubernetes_namespace.boomi.metadata[0].name
   create_namespace = false
@@ -246,8 +232,8 @@ resource "helm_release" "boomi_runtime_cloud" {
       }
 
       serviceAccount = {
-        create = true
-        name   = "boomi-runtime-cloud-sa"
+        create = false
+        name   = kubernetes_service_account.boomi_workload.metadata[0].name
         annotations = {
           "eks.amazonaws.com/role-arn" = aws_iam_role.boomi_workload.arn
         }
@@ -383,6 +369,7 @@ resource "helm_release" "boomi_runtime_cloud" {
     kubernetes_service_account.boomi_workload,
     kubernetes_secret.boomi_install_token,
     kubernetes_persistent_volume_claim.runtime,
+    aws_eks_node_group.boomi_cloud,
     helm_release.boomi_elastic_controller
   ]
 
@@ -396,7 +383,7 @@ resource "helm_release" "boomi_runtime_cloud" {
 resource "helm_release" "kube_prometheus_stack" {
   count            = var.enable_monitoring ? 1 : 0
   name             = "monitoring"
-  repository       = helm_repository.prometheus_community.name
+  repository       = "https://prometheus-community.github.io/helm-charts"
   chart            = "kube-prometheus-stack"
   version          = var.helm_prometheus_version
   namespace        = kubernetes_namespace.monitoring[0].metadata[0].name
@@ -490,7 +477,7 @@ resource "helm_release" "kube_prometheus_stack" {
         }
 
         datasources = {
-          datasources.yaml = {
+          "datasources.yaml" = {
             apiVersion = 1
             datasources = [
               {
@@ -560,6 +547,10 @@ resource "helm_release" "cluster_autoscaler" {
         clusterName = var.eks_cluster_name
       }
 
+      image = {
+        tag = var.cluster_autoscaler_version
+      }
+
       awsRegion = var.aws_region
 
       rbac = {
@@ -625,6 +616,7 @@ resource "helm_release" "cluster_autoscaler" {
 
   depends_on = [
     aws_eks_cluster.main,
+    aws_eks_node_group.system,
     aws_iam_role.cluster_autoscaler
   ]
 
@@ -646,6 +638,8 @@ resource "helm_release" "aws_load_balancer_controller" {
   values = [
     jsonencode({
       clusterName = var.eks_cluster_name
+      region      = var.aws_region
+      vpcId       = aws_vpc.main.id
 
       serviceAccount = {
         create = true
@@ -707,6 +701,7 @@ resource "helm_release" "aws_load_balancer_controller" {
 
   depends_on = [
     aws_eks_cluster.main,
+    aws_eks_node_group.system,
     aws_iam_role.aws_load_balancer_controller
   ]
 
@@ -741,3 +736,4 @@ output "cluster_autoscaler_enabled" {
   description = "Is cluster autoscaler enabled"
   value       = var.enable_cluster_autoscaler
 }
+

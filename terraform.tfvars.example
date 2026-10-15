@@ -17,7 +17,7 @@
 # ============================================================================
 
 aws_region  = "us-east-2"
-aws_profile = "default"
+aws_profile = null # Set a profile name only when using a named AWS CLI profile.
 environment = "dev"  # dev, staging, or prod
 
 # ============================================================================
@@ -64,7 +64,7 @@ enable_vpn_gateway    = false
 # ============================================================================
 
 eks_cluster_name                 = "boomi-elastic-cluster"
-eks_cluster_version              = "1.27"
+eks_cluster_version              = "REPLACE_WITH_SUPPORTED_EKS_VERSION"
 eks_cluster_enabled_log_types    = ["api", "audit", "authenticator", "controllerManager", "scheduler"]
 eks_cluster_log_retention_days   = 7
 
@@ -171,7 +171,7 @@ log_retention_days              = 30
 # ============================================================================
 
 enable_cluster_autoscaler              = true
-cluster_autoscaler_version             = "v1.27.0"
+cluster_autoscaler_version = "REPLACE_WITH_MATCHING_AUTOSCALER_VERSION"
 
 enable_aws_load_balancer_controller    = true
 
@@ -254,3 +254,4 @@ kms_key_deletion_window_days           = 7
 # 7. Use a separate terraform.tfvars file per environment
 # 8. DO NOT commit terraform.tfvars to version control
 #
+

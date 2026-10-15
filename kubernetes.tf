@@ -420,23 +420,3 @@ resource "kubernetes_secret" "boomi_install_token" {
 # ============================================================================
 # OUTPUTS
 # ============================================================================
-
-output "boomi_namespace" {
-  description = "Boomi namespace name"
-  value       = kubernetes_namespace.boomi.metadata[0].name
-}
-
-output "keda_namespace" {
-  description = "KEDA namespace name"
-  value       = kubernetes_namespace.keda.metadata[0].name
-}
-
-output "monitoring_namespace" {
-  description = "Monitoring namespace name"
-  value       = var.enable_monitoring ? kubernetes_namespace.monitoring[0].metadata[0].name : null
-}
-
-output "boomi_service_account" {
-  description = "Boomi workload service account name"
-  value       = kubernetes_service_account.boomi_workload.metadata[0].name
-}

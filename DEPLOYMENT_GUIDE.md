@@ -1,3 +1,9 @@
+> **Deployment review:** This configuration is not yet certified for a fresh
+> deployment. Read [DEPLOYMENT_REVIEW.md](DEPLOYMENT_REVIEW.md) before following
+> the historical instructions below. Some chart values and version examples
+> still require verification. Do not treat an infrastructure apply as proof of
+> working Boomi elastic executions.
+
 # Boomi Elastic Executions on EKS - Complete Deployment Guide
 
 ## Table of Contents
@@ -984,3 +990,4 @@ For more information:
 - Check TROUBLESHOOTING section above
 - Review Boomi documentation
 - AWS EKS Best Practices: https://aws.github.io/aws-eks-best-practices/
+

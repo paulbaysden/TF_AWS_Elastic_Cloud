@@ -30,8 +30,7 @@ terraform.rc
 *.tfplan
 *.tfplan.json
 
-# Ignore lock files (optional - comment out if you want to track them)
-.terraform.lock.hcl
+# Commit .terraform.lock.hcl after validating provider selections
 
 # IDE
 .idea/
@@ -85,3 +84,8 @@ package-lock.json
 *.bak
 *.backup
 *.old
+
+
+# Local configuration and saved plans
+config.yaml
+tfplan

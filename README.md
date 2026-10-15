@@ -1,3 +1,9 @@
+> **Deployment review:** This configuration is not yet certified for a fresh
+> deployment. Read [DEPLOYMENT_REVIEW.md](DEPLOYMENT_REVIEW.md) before following
+> the historical instructions below. Some chart values and version examples
+> still require verification. Do not treat an infrastructure apply as proof of
+> working Boomi elastic executions.
+
 # Boomi Elastic Executions - EKS Terraform Automation
 
 Complete Terraform automation for deploying Boomi Elastic Runtime with Kubernetes Event Driven Autoscaler (KEDA) on AWS EKS.
@@ -483,3 +489,4 @@ This Terraform configuration is provided as-is. Refer to your Boomi license agre
 
 For Boomi-specific issues, contact [Boomi Support](https://boomi.atlassian.net/).
 For Terraform issues, refer to the troubleshooting section above.
+
