@@ -1,0 +1,256 @@
+# ============================================================================
+# TERRAFORM VALUES - COPY THIS FILE TO terraform.tfvars AND UPDATE VALUES
+# ============================================================================
+# 
+# This file contains example values for all Terraform variables.
+# 
+# IMPORTANT: 
+# 1. Copy this file to terraform.tfvars
+# 2. Update all values marked with *** REQUIRED ***
+# 3. Adjust other values for your environment
+# 4. DO NOT commit terraform.tfvars to version control (add to .gitignore)
+#
+# ============================================================================
+
+# ============================================================================
+# AWS CONFIGURATION
+# ============================================================================
+
+aws_region  = "us-east-2"
+aws_profile = "default"
+environment = "dev"  # dev, staging, or prod
+
+# ============================================================================
+# REQUIRED - BOOMI INSTALL TOKEN
+# ============================================================================
+# 
+# Generate this from Boomi Platform:
+# 1. Log in to Boomi Platform
+# 2. Go to Manage > Cloud Management
+# 3. Click on your cloud or create new cloud
+# 4. Click "Install Cloud Molecule"
+# 5. Generate installation token
+# 6. Copy the token and paste it below
+#
+boomi_install_token = ""  # *** REQUIRED - Update this ***
+
+# ============================================================================
+# PROJECT CONFIGURATION
+# ============================================================================
+
+project_name = "boomi-elastic"
+
+tags = {
+  Environment = "dev"
+  Project     = "boomi-elastic"
+  Owner       = "platform-team"
+  CostCenter  = "engineering"
+  ManagedBy   = "terraform"
+  CreatedDate = "2024"
+}
+
+# ============================================================================
+# VPC CONFIGURATION
+# ============================================================================
+
+vpc_cidr              = "10.0.0.0/16"
+public_subnet_cidrs   = ["10.0.1.0/24", "10.0.2.0/24"]
+private_subnet_cidrs  = ["10.0.10.0/24", "10.0.11.0/24"]
+enable_nat_gateway    = true
+enable_vpn_gateway    = false
+
+# ============================================================================
+# EKS CLUSTER CONFIGURATION
+# ============================================================================
+
+eks_cluster_name                 = "boomi-elastic-cluster"
+eks_cluster_version              = "1.27"
+eks_cluster_enabled_log_types    = ["api", "audit", "authenticator", "controllerManager", "scheduler"]
+eks_cluster_log_retention_days   = 7
+
+# ============================================================================
+# EKS NODE GROUP CONFIGURATION
+# ============================================================================
+
+system_node_group_config = {
+  name           = "system-nodes"
+  instance_types = ["t3.large"]     # Adjust based on your needs
+  desired_size   = 2                 # Number of nodes
+  min_size       = 2
+  max_size       = 4
+  disk_size      = 50
+}
+
+boomi_node_group_config = {
+  name           = "boomi-cloud-nodes"
+  instance_types = ["t3.xlarge"]    # Larger for cloud pods; adjust if needed
+  desired_size   = 3
+  min_size       = 3
+  max_size       = 6
+  disk_size      = 100
+}
+
+# Instance type recommendations:
+# Development:   t3.large (system), t3.large (boomi)
+# Staging:       t3.large (system), t3.xlarge (boomi)
+# Production:    t3.xlarge (system), t3.2xlarge or larger (boomi)
+
+# ============================================================================
+# BOOMI CONFIGURATION
+# ============================================================================
+
+boomi_cloud_name = "ElasticCloud"
+boomi_atom_name  = "ElasticCloud"
+
+# Docker image tags (match with your Boomi release)
+boomi_runtime_cloud_image_tag              = "5.1.1"
+boomi_elastic_controller_image_tag         = "0.1.32"
+
+# Pod replicas
+boomi_runtime_cloud_replicas       = 3
+boomi_elastic_controller_replicas  = 1
+
+# ============================================================================
+# BOOMI WORKER CONFIGURATION
+# ============================================================================
+
+# Worker quotas (can be overridden per attachment in Boomi Platform)
+boomi_max_workers                = 10     # Maximum worker pods per attachment
+boomi_min_workers                = 1      # Minimum worker pods (0 = scale to zero)
+boomi_max_running_executions     = 10     # Max concurrent executions per worker
+boomi_elastic_scaling_threshold  = 80     # Percentage - scale when at 80% capacity
+
+# Pod resource requests (what each pod is guaranteed)
+boomi_runner_cpu_request    = "500m"
+boomi_runner_memory_request = "512Mi"
+boomi_worker_cpu_request    = "1000m"
+boomi_worker_memory_request = "700Mi"
+
+# ============================================================================
+# KUBERNETES NAMESPACE CONFIGURATION
+# ============================================================================
+
+boomi_namespace     = "boomi"
+keda_namespace      = "keda"
+monitoring_namespace = "monitoring"
+
+# ============================================================================
+# STORAGE CONFIGURATION
+# ============================================================================
+
+enable_efs                       = true
+efs_performance_mode             = "generalPurpose"  # or "maxIO"
+efs_throughput_mode              = "bursting"        # or "provisioned"
+efs_provisioned_throughput_mibps = 100               # Only if throughput_mode = provisioned
+
+runtime_storage_size = "100Gi"
+
+# ============================================================================
+# HELM CHART VERSIONS
+# ============================================================================
+
+helm_keda_version                         = "2.13.0"
+helm_boomi_runtime_cloud_version          = "0.1.0"
+helm_boomi_elastic_controller_version     = "0.1.0"
+helm_prometheus_version                   = "54.0.0"
+
+# ============================================================================
+# MONITORING & LOGGING
+# ============================================================================
+
+enable_monitoring               = true
+prometheus_retention_days       = 15
+grafana_admin_password          = "prom-operator"  # Change in production!
+
+enable_log_forwarding           = false
+cloudwatch_log_group            = "/aws/eks/boomi-elastic"
+log_retention_days              = 30
+
+# ============================================================================
+# OPTIONAL FEATURES
+# ============================================================================
+
+enable_cluster_autoscaler              = true
+cluster_autoscaler_version             = "v1.27.0"
+
+enable_aws_load_balancer_controller    = true
+
+enable_kms_encryption                  = true
+kms_key_deletion_window_days           = 7
+
+# ============================================================================
+# EXAMPLE CONFIGURATIONS FOR DIFFERENT ENVIRONMENTS
+# ============================================================================
+
+# DEVELOPMENT ENVIRONMENT:
+# Uncomment the following section to use for development:
+# 
+# eks_cluster_name                = "boomi-elastic-dev"
+# environment                      = "dev"
+# system_node_group_config         = {
+#   name           = "system-nodes"
+#   instance_types = ["t3.large"]
+#   desired_size   = 2
+#   min_size       = 2
+#   max_size       = 4
+#   disk_size      = 50
+# }
+# boomi_node_group_config          = {
+#   name           = "boomi-cloud-nodes"
+#   instance_types = ["t3.large"]
+#   desired_size   = 2
+#   min_size       = 2
+#   max_size       = 4
+#   disk_size      = 50
+# }
+# boomi_max_workers                = 5
+# enable_monitoring                = true
+# enable_cluster_autoscaler        = true
+# enable_kms_encryption            = false
+# 
+
+# PRODUCTION ENVIRONMENT:
+# Uncomment the following section to use for production:
+#
+# eks_cluster_name                = "boomi-elastic-prod"
+# environment                      = "prod"
+# system_node_group_config         = {
+#   name           = "system-nodes"
+#   instance_types = ["t3.xlarge"]
+#   desired_size   = 3
+#   min_size       = 3
+#   max_size       = 6
+#   disk_size      = 100
+# }
+# boomi_node_group_config          = {
+#   name           = "boomi-cloud-nodes"
+#   instance_types = ["t3.2xlarge"]
+#   desired_size   = 5
+#   min_size       = 5
+#   max_size       = 20
+#   disk_size      = 200
+# }
+# boomi_max_workers                = 50
+# boomi_min_workers                = 2
+# boomi_max_running_executions     = 20
+# enable_monitoring                = true
+# prometheus_retention_days        = 30
+# enable_cluster_autoscaler        = true
+# enable_kms_encryption            = true
+# efs_provisioned_throughput_mibps = 250
+# runtime_storage_size             = "500Gi"
+#
+
+# ============================================================================
+# IMPORTANT NOTES
+# ============================================================================
+#
+# 1. The boomi_install_token is REQUIRED - generate from Boomi Platform
+# 2. Change grafana_admin_password in production environments
+# 3. For production, use larger instance types (t3.xlarge or better)
+# 4. Enable KMS encryption for production deployments
+# 5. Increase EFS provisioned throughput for high-volume workloads
+# 6. Set monitoring to true for observability
+# 7. Use a separate terraform.tfvars file per environment
+# 8. DO NOT commit terraform.tfvars to version control
+#

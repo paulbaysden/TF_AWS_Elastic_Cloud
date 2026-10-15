@@ -1,0 +1,320 @@
+###############################################################################
+# BOOMI ELASTIC EXECUTIONS - EKS DEPLOYMENT CONFIGURATION
+# 
+# Copy this file to config.yaml and fill in the values for your environment
+# This file is NOT used by Terraform directly - use terraform.tfvars instead
+# This is for reference and documentation purposes
+###############################################################################
+
+# =============================================================================
+# AWS CONFIGURATION
+# =============================================================================
+aws:
+  region: us-east-2                      # AWS region for EKS cluster
+  profile: default                       # AWS CLI profile to use (optional)
+  
+  # VPC Configuration
+  vpc:
+    cidr_block: 10.0.0.0/16             # VPC CIDR range
+    enable_dns_hostnames: true
+    enable_dns_support: true
+    
+    # Subnet Configuration
+    public_subnets:
+      - cidr: 10.0.1.0/24
+        az: 0                            # Availability zone index (us-east-2a)
+      - cidr: 10.0.2.0/24
+        az: 1                            # Availability zone index (us-east-2b)
+    
+    private_subnets:
+      - cidr: 10.0.10.0/24
+        az: 0
+      - cidr: 10.0.11.0/24
+        az: 1
+
+  # EKS Cluster Configuration
+  eks:
+    cluster_name: boomi-elastic-cluster
+    cluster_version: 1.27                # Kubernetes version
+    
+    # Control plane logging
+    cluster_enabled_log_types:
+      - api
+      - audit
+      - authenticator
+      - controllerManager
+      - scheduler
+    
+    # Node Groups Configuration
+    node_groups:
+      system:
+        name: system-nodes
+        instance_types:
+          - t3.large                     # System node instance type
+        desired_size: 2
+        min_size: 2
+        max_size: 4
+        disk_size: 50                    # Root volume size in GB
+        
+      boomi_cloud:
+        name: boomi-cloud-nodes
+        instance_types:
+          - t3.xlarge                    # Cloud pod instance type
+        desired_size: 3
+        min_size: 3
+        max_size: 6
+        disk_size: 100
+        labels:
+          workload: boomi-cloud
+        taints:
+          - key: boomi-cloud
+            value: "true"
+            effect: NoSchedule
+
+  # EBS (for persistent storage)
+  ebs_csi_driver:
+    enabled: true
+    version: "v1.14.1"                   # EBS CSI Driver version
+
+  # Elastic File System (for shared storage)
+  efs:
+    enabled: true
+    performance_mode: generalPurpose    # generalPurpose or maxIO
+    throughput_mode: bursting           # bursting or provisioned
+    provisioned_throughput_in_mibps: 100 # Only if throughput_mode = provisioned
+
+# =============================================================================
+# BOOMI PLATFORM CONFIGURATION
+# =============================================================================
+boomi:
+  # Installation Token - MUST be generated from Boomi Platform
+  # Go to Manage > Cloud Management > Create Cloud > Install Cloud Molecule
+  install_token: ""                      # *** REQUIRED - Generate from Boomi Platform ***
+  
+  # Cloud Configuration
+  cloud:
+    name: ElasticCloud                   # Name of the cloud in Boomi Platform
+    atom_name: ElasticCloud              # Atom name for cloud molecule
+    
+  # Runtime Cloud Deployment
+  runtime_cloud:
+    image_tag: "5.1.1"                  # Runtime cloud image tag
+    replicas: 3                          # Number of cloud pods
+    
+    # Resource requests/limits for cloud pods
+    resources:
+      requests:
+        cpu: "1000m"
+        memory: "2Gi"
+      limits:
+        cpu: "2000m"
+        memory: "4Gi"
+    
+    # Container properties overrides
+    container_properties_overrides:
+      com.boomi.container.processExecMode: "ELASTIC"
+      com.boomi.container.cloudBurstThreadCount: "20"
+      com.boomi.container.cloudMaxJobs: "10"
+    
+    # Horizontal Pod Autoscaler for cloud pods (usually disabled)
+    autoscaling:
+      enabled: false
+      min_replicas: 3
+      max_replicas: 6
+      target_cpu_utilization: 80
+
+  # Elastic Controller Configuration
+  elastic_controller:
+    image_tag: "0.1.32"                 # Elastic controller image tag
+    replicas: 1                          # Usually 1 is sufficient
+    
+    # Resource requests/limits
+    resources:
+      requests:
+        cpu: "500m"
+        memory: "512Mi"
+      limits:
+        cpu: "1000m"
+        memory: "1Gi"
+    
+    # Pod customization hooks
+    pod_customization:
+      # Customizations for forked execution pods
+      runner:
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "512Mi"
+          limits:
+            cpu: "1000m"
+            memory: "1Gi"
+      
+      # Customizations for worker pods
+      worker:
+        resources:
+          requests:
+            cpu: "1000m"
+            memory: "700Mi"
+          limits:
+            cpu: "2000m"
+            memory: "1500Mi"
+
+  # Worker Configuration and Quotas
+  workers:
+    # Default quotas (can be overridden per attachment)
+    max_workers: 10                      # Max number of worker pods per attachment
+    min_workers: 1                       # Min number of worker pods (0 = scale to zero)
+    max_running_executions: 10           # Max concurrent executions per worker
+    elastic_scaling_threshold: 80        # Percentage (80% = scale when 8/10 executions)
+    
+    # Worker pod resource allocation
+    resources:
+      requests:
+        cpu: "1000m"
+        memory: "700Mi"
+      limits:
+        cpu: "2000m"
+        memory: "1500Mi"
+
+# =============================================================================
+# KUBERNETES CONFIGURATION
+# =============================================================================
+kubernetes:
+  namespaces:
+    boomi: boomi                         # Primary namespace for Boomi components
+    keda: keda                           # Namespace for KEDA components
+    monitoring: monitoring               # Namespace for monitoring (optional)
+  
+  # RBAC Configuration
+  rbac:
+    create: true
+    service_account_name: boomi-sa
+
+  # Network Policies
+  network_policies:
+    enabled: false                       # Set to true for restricted network access
+    
+  # Pod Security Policies
+  pod_security:
+    enforce: restricted                  # baseline, restricted
+
+# =============================================================================
+# STORAGE CONFIGURATION
+# =============================================================================
+storage:
+  # EFS Configuration for shared file system
+  efs:
+    enabled: true
+    size_gb: 100                         # Initial size (EFS auto-scales)
+    
+  # Persistent Volume Claim for runtime
+  runtime_claim:
+    name: runtime-claim
+    size: 100Gi                          # Storage size for runtime
+    storage_class: efs-sc                # Storage class name
+    access_mode: ReadWriteMany
+
+# =============================================================================
+# HELM CHART VERSIONS
+# =============================================================================
+helm:
+  keda:
+    version: "2.13.0"                    # KEDA helm chart version
+    namespace: keda
+    
+  prometheus:
+    version: "54.0.0"                    # Kube-prometheus-stack version
+    namespace: monitoring
+    enabled: true                        # Optional monitoring stack
+    
+  boomi:
+    runtime_cloud:
+      version: "0.1.0"                   # Runtime cloud helm chart version
+      namespace: boomi
+    
+    elastic_controller:
+      version: "0.1.0"                   # Elastic controller helm chart version
+      namespace: boomi
+
+# =============================================================================
+# MONITORING & LOGGING (OPTIONAL)
+# =============================================================================
+monitoring:
+  enabled: true
+  
+  prometheus:
+    enabled: true
+    retention_days: 15
+    
+  grafana:
+    enabled: true
+    admin_password: "prom-operator"      # Change this in production
+    
+  log_retention_days: 30
+
+# =============================================================================
+# BACKUP & DISASTER RECOVERY
+# =============================================================================
+backup:
+  enabled: false                         # Set to true to enable automated backups
+  schedule: "0 2 * * *"                  # Cron schedule (2 AM daily)
+  retention_days: 30
+
+# =============================================================================
+# TAGS & LABELS
+# =============================================================================
+tags:
+  Environment: dev                       # dev, staging, prod
+  Project: boomi-elastic
+  Owner: platform-team
+  CostCenter: engineering
+  ManagedBy: terraform
+
+# =============================================================================
+# OPTIONAL FEATURES
+# =============================================================================
+features:
+  # AWS Load Balancer Controller for ALB ingress
+  load_balancer_controller:
+    enabled: true
+    
+  # EBS CSI Driver for EBS volumes
+  ebs_csi_driver:
+    enabled: true
+    
+  # Cluster Autoscaler for node scaling
+  cluster_autoscaler:
+    enabled: true
+    version: "v1.27.0"
+    
+  # AWS for Fluent Bit for log forwarding
+  log_forwarding:
+    enabled: false
+    cloudwatch_log_group: /aws/eks/boomi-elastic
+    
+  # Secrets Manager integration
+  secrets_manager:
+    enabled: true
+
+# =============================================================================
+# ADVANCED CONFIGURATION
+# =============================================================================
+advanced:
+  # OIDC Provider for IRSA (IAM Roles for Service Accounts)
+  oidc_provider:
+    enabled: true
+  
+  # Security Group Configuration
+  security_groups:
+    # Additional ingress rules for the cluster
+    additional_ingress_rules:
+      - from_port: 443
+        to_port: 443
+        protocol: tcp
+        cidr_blocks:
+          - 10.0.0.0/16    # Allow from within VPC
+  
+  # Encryption
+  kms:
+    enabled: true           # Enable envelope encryption for EKS
+    deletion_window: 7      # Days before KMS key deletion
