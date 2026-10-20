@@ -9,9 +9,9 @@ variable "aws_region" {
 }
 
 variable "aws_profile" {
-  description = "AWS CLI profile to use"
+  description = "Optional AWS CLI profile; null uses the standard AWS credential chain"
   type        = string
-  default     = "default"
+  default     = null
 }
 
 variable "environment" {
@@ -61,9 +61,13 @@ variable "private_subnet_cidrs" {
 }
 
 variable "enable_nat_gateway" {
-  description = "Enable NAT Gateway for private subnets"
+  description = "NAT is required for private nodes in this configuration"
   type        = bool
   default     = true
+  validation {
+    condition     = var.enable_nat_gateway
+    error_message = "Private nodes require NAT; no alternative egress is provisioned."
+  }
 }
 
 variable "enable_vpn_gateway" {
@@ -85,7 +89,10 @@ variable "eks_cluster_name" {
 variable "eks_cluster_version" {
   description = "Kubernetes version for EKS cluster"
   type        = string
-  default     = "1.27"
+  validation {
+    condition     = can(regex("^1\\.[0-9]+$", var.eks_cluster_version))
+    error_message = "Choose an EKS version available in your region and supported by Boomi."
+  }
 }
 
 variable "eks_cluster_enabled_log_types" {
@@ -285,9 +292,13 @@ variable "monitoring_namespace" {
 # ============================================================================
 
 variable "enable_efs" {
-  description = "Enable Elastic File System for shared storage"
+  description = "Shared EFS storage is required for the runtime cloud"
   type        = bool
   default     = true
+  validation {
+    condition     = var.enable_efs
+    error_message = "This runtime cloud requires shared ReadWriteMany EFS storage."
+  }
 }
 
 variable "efs_performance_mode" {
@@ -386,7 +397,8 @@ variable "enable_cluster_autoscaler" {
 variable "cluster_autoscaler_version" {
   description = "Version of Cluster Autoscaler to deploy"
   type        = string
-  default     = "v1.27.0"
+  # Match the minor version of eks_cluster_version.
+
 }
 
 # ============================================================================
@@ -440,3 +452,4 @@ variable "log_retention_days" {
   type        = number
   default     = 30
 }
+

@@ -1,26 +1,3 @@
-terraform {
-  required_version = ">= 1.0"
-  
-  required_providers {
-    aws = {
-      source  = "hashicorp/aws"
-      version = "~> 5.0"
-    }
-    kubernetes = {
-      source  = "hashicorp/kubernetes"
-      version = "~> 2.23"
-    }
-    helm = {
-      source  = "hashicorp/helm"
-      version = "~> 2.11"
-    }
-    kubectl = {
-      source  = "gavinbunney/kubectl"
-      version = "~> 1.14"
-    }
-  }
-}
-
 provider "aws" {
   region  = var.aws_region
   profile = var.aws_profile
@@ -31,7 +8,6 @@ provider "aws" {
       {
         Environment = var.environment
         Region      = var.aws_region
-        CreatedAt   = timestamp()
       }
     )
   }
@@ -40,26 +16,34 @@ provider "aws" {
 provider "kubernetes" {
   host                   = aws_eks_cluster.main.endpoint
   cluster_ca_certificate = base64decode(aws_eks_cluster.main.certificate_authority[0].data)
-  token                  = data.aws_eks_cluster_auth.main.token
+  exec {
+    api_version = "client.authentication.k8s.io/v1beta1"
+    command     = "aws"
+    args        = concat(["eks", "get-token", "--region", var.aws_region, "--cluster-name", aws_eks_cluster.main.name], var.aws_profile == null ? [] : ["--profile", var.aws_profile])
+  }
 }
 
 provider "helm" {
   kubernetes {
     host                   = aws_eks_cluster.main.endpoint
     cluster_ca_certificate = base64decode(aws_eks_cluster.main.certificate_authority[0].data)
-    token                  = data.aws_eks_cluster_auth.main.token
+    exec {
+      api_version = "client.authentication.k8s.io/v1beta1"
+      command     = "aws"
+      args        = concat(["eks", "get-token", "--region", var.aws_region, "--cluster-name", aws_eks_cluster.main.name], var.aws_profile == null ? [] : ["--profile", var.aws_profile])
+    }
   }
 }
 
 provider "kubectl" {
   host                   = aws_eks_cluster.main.endpoint
   cluster_ca_certificate = base64decode(aws_eks_cluster.main.certificate_authority[0].data)
-  token                  = data.aws_eks_cluster_auth.main.token
+  exec {
+    api_version = "client.authentication.k8s.io/v1beta1"
+    command     = "aws"
+    args        = concat(["eks", "get-token", "--region", var.aws_region, "--cluster-name", aws_eks_cluster.main.name], var.aws_profile == null ? [] : ["--profile", var.aws_profile])
+  }
   load_config_file       = false
-}
-
-data "aws_eks_cluster_auth" "main" {
-  name = aws_eks_cluster.main.name
 }
 
 data "aws_availability_zones" "available" {
@@ -266,21 +250,14 @@ resource "aws_eks_cluster" "main" {
 
   enabled_cluster_log_types = var.eks_cluster_enabled_log_types
 
-  # Enable control plane logging
-  dynamic "logging_config" {
-    for_each = var.eks_cluster_enabled_log_types != [] ? [1] : []
+  dynamic "encryption_config" {
+    for_each = var.enable_kms_encryption ? [1] : []
     content {
-      cloudwatch_log_group_name = aws_cloudwatch_log_group.eks_cluster.name
-      enabled                   = true
-      log_types                 = var.eks_cluster_enabled_log_types
+      provider {
+        key_arn = aws_kms_key.eks[0].arn
+      }
+      resources = ["secrets"]
     }
-  }
-
-  encryption_config {
-    provider {
-      key_arn = var.enable_kms_encryption ? aws_kms_key.eks[0].arn : ""
-    }
-    resources = var.enable_kms_encryption ? ["secrets"] : []
   }
 
   tags = {
@@ -315,11 +292,16 @@ resource "aws_eks_node_group" "system" {
   subnet_ids      = aws_subnet.private[*].id
   instance_types  = var.system_node_group_config.instance_types
   disk_size       = var.system_node_group_config.disk_size
+  ami_type        = "AL2023_x86_64_STANDARD"
 
   scaling_config {
     desired_size = var.system_node_group_config.desired_size
     max_size     = var.system_node_group_config.max_size
     min_size     = var.system_node_group_config.min_size
+  }
+
+  labels = {
+    workload = "system"
   }
 
   update_config {
@@ -333,7 +315,8 @@ resource "aws_eks_node_group" "system" {
   depends_on = [
     aws_iam_role_policy_attachment.eks_worker_node_policy,
     aws_iam_role_policy_attachment.eks_cni_policy,
-    aws_iam_role_policy_attachment.eks_container_registry_policy
+    aws_iam_role_policy_attachment.eks_container_registry_policy,
+    aws_route_table_association.private
   ]
 }
 
@@ -344,6 +327,7 @@ resource "aws_eks_node_group" "boomi_cloud" {
   subnet_ids      = aws_subnet.private[*].id
   instance_types  = var.boomi_node_group_config.instance_types
   disk_size       = var.boomi_node_group_config.disk_size
+  ami_type        = "AL2023_x86_64_STANDARD"
 
   scaling_config {
     desired_size = var.boomi_node_group_config.desired_size
@@ -372,7 +356,8 @@ resource "aws_eks_node_group" "boomi_cloud" {
   depends_on = [
     aws_iam_role_policy_attachment.eks_worker_node_policy,
     aws_iam_role_policy_attachment.eks_cni_policy,
-    aws_iam_role_policy_attachment.eks_container_registry_policy
+    aws_iam_role_policy_attachment.eks_container_registry_policy,
+    aws_route_table_association.private
   ]
 }
 
@@ -496,3 +481,4 @@ resource "aws_iam_role_policy_attachment" "aws_load_balancer_controller" {
   role       = aws_iam_role.aws_load_balancer_controller[0].name
   policy_arn = "arn:aws:iam::aws:policy/ElasticLoadBalancingFullAccess"
 }
+

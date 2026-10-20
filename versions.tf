@@ -58,52 +58,5 @@ terraform {
   }
 }
 
-# ============================================================================
-# COMPATIBILITY MATRIX
-# ============================================================================
-#
-# Test combinations before major version updates:
-#
-# Terraform | AWS Provider | Kubernetes | Helm  | kubectl
-# =========================================================
-# 1.0+      | 5.0+        | 2.23+      | 2.11+ | 1.14+   ✓ CURRENT
-# 1.0+      | 4.x         | 2.19+      | 2.8+  | 1.10+   ✓ PREVIOUS
-#
-# ✓ = Tested and supported
-# • = Known to work but not actively tested
-# ✗ = Not recommended due to breaking changes or conflicts
-#
-
-# ============================================================================
-# UPGRADE INSTRUCTIONS
-# ============================================================================
-#
-# To upgrade provider versions:
-#
-# 1. Update version constraint in this file
-# 2. Run: terraform init -upgrade
-# 3. Review: terraform plan -out=upgrade.tfplan
-# 4. Test in dev environment first
-# 5. Review changelog for breaking changes
-# 6. Apply: terraform apply upgrade.tfplan
-#
-# IMPORTANT: Always backup terraform.tfstate before upgrading!
-#
-
-# ============================================================================
-# VERSION HISTORY
-# ============================================================================
-#
-# v1.0 (2024)
-# - Terraform >= 1.0
-# - AWS Provider >= 5.0
-# - Kubernetes Provider >= 2.23
-# - Helm Provider >= 2.11
-# - kubectl Provider >= 1.14
-#
-# Justification:
-# - AWS 5.0+ provides improved EKS support and IRSA features
-# - Kubernetes 2.23+ has stable Kubernetes 1.27+ support
-# - Helm 2.11+ supports latest chart features
-# - kubectl 1.14+ compatible with EKS 1.27+
-#
+# Provider selections have not been validated in a live deployment.
+# Run terraform init and terraform validate, then commit .terraform.lock.hcl.

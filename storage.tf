@@ -88,14 +88,14 @@ resource "aws_security_group" "efs" {
 resource "aws_eks_addon" "ebs_csi_driver" {
   cluster_name             = aws_eks_cluster.main.name
   addon_name               = "aws-ebs-csi-driver"
-  addon_version            = "v1.14.1"
+  addon_version            = data.aws_eks_addon_version.ebs_csi_driver.version
   service_account_role_arn = aws_iam_role.ebs_csi_driver.arn
 
   tags = {
     Name = "${var.project_name}-ebs-csi-driver"
   }
 
-  depends_on = [aws_eks_node_group.system]
+  depends_on = [aws_eks_node_group.system, aws_iam_role_policy_attachment.ebs_csi_driver]
 }
 
 # ============================================================================
@@ -113,17 +113,13 @@ resource "helm_release" "efs_csi_driver" {
 
   values = [
     jsonencode({
-      serviceAccount = {
-        create = true
-        name   = "efs-csi-controller-sa"
-        annotations = {
-          "eks.amazonaws.com/role-arn" = aws_iam_role.efs_csi_driver[0].arn
-        }
-      }
       controller = {
         serviceAccount = {
-          create = false
+          create = true
           name   = "efs-csi-controller-sa"
+          annotations = {
+            "eks.amazonaws.com/role-arn" = aws_iam_role.efs_csi_driver[0].arn
+          }
         }
         resources = {
           requests = {
@@ -153,7 +149,9 @@ resource "helm_release" "efs_csi_driver" {
 
   depends_on = [
     aws_eks_cluster.main,
-    aws_efs_file_system.runtime
+    aws_efs_file_system.runtime,
+    aws_eks_node_group.system,
+    aws_iam_role_policy_attachment.efs_csi_driver
   ]
 }
 
@@ -173,7 +171,7 @@ resource "kubernetes_storage_class" "efs" {
   allow_volume_expansion = true
 
   parameters = {
-    provisioningMode = "efs"
+    provisioningMode = "efs-ap"
     fileSystemId     = aws_efs_file_system.runtime[0].id
     directoryPerms   = "700"
     uid              = "0"
@@ -222,30 +220,30 @@ resource "kubernetes_persistent_volume" "runtime" {
     storage_class_name = "efs-sc"
 
     persistent_volume_source {
-      nfs {
-        path      = "/"
-        server    = "${aws_efs_file_system.runtime[0].dns_name}"
+      csi {
+        driver        = "efs.csi.aws.com"
+        volume_handle = "${aws_efs_file_system.runtime[0].id}::${aws_efs_access_point.runtime[0].id}"
       }
     }
 
     persistent_volume_reclaim_policy = "Retain"
   }
 
-  depends_on = [kubernetes_storage_class.efs]
+  depends_on = [kubernetes_storage_class.efs, aws_efs_mount_target.runtime]
 }
 
 resource "kubernetes_persistent_volume_claim" "runtime" {
   count = var.enable_efs ? 1 : 0
   metadata {
     name      = "runtime-claim"
-    namespace = var.boomi_namespace
+    namespace = kubernetes_namespace.boomi.metadata[0].name
   }
 
   spec {
     access_modes       = ["ReadWriteMany"]
     storage_class_name = "efs-sc"
 
-    resources = {
+    resources {
       requests = {
         storage = var.runtime_storage_size
       }
@@ -293,35 +291,46 @@ resource "aws_backup_plan" "efs" {
   }
 }
 
-resource "aws_backup_resource_assignment" "efs" {
+resource "aws_backup_selection" "efs" {
   count              = var.enable_efs ? 1 : 0
   name               = "${var.project_name}-efs-backup-assignment"
-  backup_plan_id     = aws_backup_plan.efs[0].id
+  plan_id            = aws_backup_plan.efs[0].id
+  iam_role_arn       = aws_iam_role.efs_backup[0].arn
   resources          = ["${aws_efs_file_system.runtime[0].arn}"]
 
-  depends_on = [aws_backup_plan.efs]
+  depends_on = [aws_backup_plan.efs, aws_iam_role_policy_attachment.efs_backup]
 }
 
 # ============================================================================
 # OUTPUTS FOR STORAGE
 # ============================================================================
 
-output "efs_file_system_id" {
-  description = "EFS File System ID"
-  value       = var.enable_efs ? aws_efs_file_system.runtime[0].id : null
+
+
+
+
+
+data "aws_eks_addon_version" "ebs_csi_driver" {
+  addon_name         = "aws-ebs-csi-driver"
+  kubernetes_version = var.eks_cluster_version
+  most_recent        = true
 }
 
-output "efs_dns_name" {
-  description = "EFS DNS name for mounting"
-  value       = var.enable_efs ? aws_efs_file_system.runtime[0].dns_name : null
+resource "aws_iam_role" "efs_backup" {
+  count = var.enable_efs ? 1 : 0
+  name  = "${var.project_name}-efs-backup"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = "sts:AssumeRole"
+      Principal = { Service = "backup.amazonaws.com" }
+    }]
+  })
 }
 
-output "efs_access_point_id" {
-  description = "EFS Access Point ID for Boomi runtime"
-  value       = var.enable_efs ? aws_efs_access_point.runtime[0].id : null
-}
-
-output "runtime_pvc_name" {
-  description = "Kubernetes PVC name for Boomi runtime"
-  value       = "runtime-claim"
+resource "aws_iam_role_policy_attachment" "efs_backup" {
+  count      = var.enable_efs ? 1 : 0
+  role       = aws_iam_role.efs_backup[0].name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSBackupServiceRolePolicyForBackup"
 }
